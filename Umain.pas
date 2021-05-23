@@ -1,0 +1,180 @@
+unit Umain;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs,ActiveX,  ComObj,  Vcl.StdCtrls;
+type
+  TSecurityCenterProduct = (AntiVirusProduct,AntiSpywareProduct,FirewallProduct);
+const
+  WmiRoot='root';
+  WmiClassSCProduct     : array [TSecurityCenterProduct] of string = ('AntiVirusProduct','AntiSpywareProduct','FirewallProduct');
+  WmiNamespaceSCProduct : array [Boolean] of string = ('SecurityCenter','SecurityCenter2');
+
+function VerSetConditionMask(dwlConditionMask: int64;dwTypeBitMask: DWORD; dwConditionMask: Byte): int64; stdcall; external kernel32;
+
+{$IFDEF UNICODE}
+function VerifyVersionInfo(var LPOSVERSIONINFOEX : OSVERSIONINFOEX;dwTypeMask: DWORD;dwlConditionMask: int64): BOOL; stdcall; external kernel32 name 'VerifyVersionInfoW';
+{$ELSE}
+function VerifyVersionInfo(var LPOSVERSIONINFOEX : OSVERSIONINFOEX;dwTypeMask: DWORD;dwlConditionMask: int64): BOOL; stdcall; external kernel32 name 'VerifyVersionInfoA';
+{$ENDIF}
+type
+  TForm1 = class(TForm)
+    Label1: TLabel;
+    Button1: TButton;
+    mmInfoGeneral: TMemo;
+    procedure Button1Click(Sender: TObject);
+  private
+    { Private declarations }
+  function Is_Win_Server : Boolean;
+  procedure  GetSCProductInfo(SCProduct:TSecurityCenterProduct);
+  procedure GetGeneralInfo;
+
+  public
+    { Public declarations }
+  end;
+
+var
+  Form1: TForm1;
+
+implementation
+
+{$R *.dfm}
+
+{ TForm1 }
+
+procedure TForm1.Button1Click(Sender: TObject);
+begin
+    GetGeneralInfo;
+end;
+
+procedure TForm1.GetGeneralInfo;
+begin
+ try
+    if Is_Win_Server then
+    begin
+     mmInfoGeneral.Lines.add('Sorry this app only can run in desktop operating systems.');
+     Halt;
+    end;
+
+    CoInitialize(nil);
+    try
+      mmInfoGeneral.Clear;
+      mmInfoGeneral.Lines.add('AntiVirus Info');
+      mmInfoGeneral.Lines.add('--------------');
+      GetSCProductInfo(AntiVirusProduct);
+      mmInfoGeneral.Lines.add('AntiSpyware Info');
+      mmInfoGeneral.Lines.add('----------------');
+      GetSCProductInfo(AntiSpywareProduct);
+      mmInfoGeneral.Lines.add('Firewall Info');
+      mmInfoGeneral.Lines.add('-------------');
+      GetSCProductInfo(FirewallProduct);
+    finally
+      CoUninitialize;
+    end;
+ except
+    on E:Exception do
+    begin
+        Writeln(E.Classname, ':', E.Message);
+        Readln;
+    end;
+  end;
+end;
+
+procedure TForm1.GetSCProductInfo(SCProduct: TSecurityCenterProduct);
+var
+  FSWbemLocator : OLEVariant;
+  FWMIService   : OLEVariant;
+  FWbemObjectSet: OLEVariant;
+  FWbemObject   : OLEVariant;
+  oEnum         : IEnumvariant;
+  iValue        : LongWord;
+  osVerInfo     : TOSVersionInfo;
+begin
+  osVerInfo.dwOSVersionInfoSize:=SizeOf(TOSVersionInfo);
+  GetVersionEx(osVerInfo);
+  if (SCProduct=AntiSpywareProduct) and (osVerInfo.dwMajorVersion<6)  then exit;   FSWbemLocator := CreateOleObject('WbemScripting.SWbemLocator');   FWMIService   := FSWbemLocator.ConnectServer('localhost',Format('%s\%s',[WmiRoot,WmiNamespaceSCProduct[osVerInfo.dwMajorVersion>=6]]), '', '');
+  FWbemObjectSet:= FWMIService.ExecQuery(Format('SELECT * FROM %s',[WmiClassSCProduct[SCProduct]]),'WQL',0);
+  oEnum         := IUnknown(FWbemObjectSet._NewEnum) as IEnumVariant;
+  while oEnum.Next(1, FWbemObject, iValue) = 0 do
+  begin
+    if osVerInfo.dwMajorVersion>=6 then  //windows vista or newer
+    begin
+      mmInfoGeneral.Lines.add(Format('displayName                    %s',[FWbemObject.displayName]));// String
+      mmInfoGeneral.Lines.add(Format('instanceGuid                   %s',[FWbemObject.instanceGuid]));// String
+      mmInfoGeneral.Lines.add(Format('pathToSignedProductExe         %s',[FWbemObject.pathToSignedProductExe]));// String
+      mmInfoGeneral.Lines.add(Format('pathToSignedReportingExe       %s',[FWbemObject.pathToSignedReportingExe]));// String
+      mmInfoGeneral.Lines.add(Format('productState                   %s',[FWbemObject.productState]));// Uint32
+    end
+    else
+    begin
+     case SCProduct of
+
+        AntiVirusProduct :
+         begin
+            mmInfoGeneral.Lines.add(Format('companyName                    %s',[FWbemObject.companyName]));// String
+            mmInfoGeneral.Lines.add(Format('displayName                    %s',[FWbemObject.displayName]));// String
+            mmInfoGeneral.Lines.add(Format('enableOnAccessUIMd5Hash        %s',[FWbemObject.enableOnAccessUIMd5Hash]));// Uint8
+            mmInfoGeneral.Lines.add(Format('enableOnAccessUIParameters     %s',[FWbemObject.enableOnAccessUIParameters]));// String
+            mmInfoGeneral.Lines.add(Format('instanceGuid                   %s',[FWbemObject.instanceGuid]));// String
+            mmInfoGeneral.Lines.add(Format('onAccessScanningEnabled        %s',[FWbemObject.onAccessScanningEnabled]));// Boolean
+            mmInfoGeneral.Lines.add(Format('pathToEnableOnAccessUI         %s',[FWbemObject.pathToEnableOnAccessUI]));// String
+            mmInfoGeneral.Lines.add(Format('pathToUpdateUI                 %s',[FWbemObject.pathToUpdateUI]));// String
+            mmInfoGeneral.Lines.add(Format('productUptoDate                %s',[FWbemObject.productUptoDate]));// Boolean
+            mmInfoGeneral.Lines.add(Format('updateUIMd5Hash                %s',[FWbemObject.updateUIMd5Hash]));// Uint8
+            mmInfoGeneral.Lines.add(Format('updateUIParameters             %s',[FWbemObject.updateUIParameters]));// String
+            mmInfoGeneral.Lines.add(Format('versionNumber                  %s',[FWbemObject.versionNumber]));// String
+         end;
+
+       FirewallProduct  :
+         begin
+            mmInfoGeneral.Lines.add(Format('companyName                    %s',[FWbemObject.companyName]));// String
+            mmInfoGeneral.Lines.add(Format('displayName                    %s',[FWbemObject.displayName]));// String
+            mmInfoGeneral.Lines.add(Format('enabled                        %s',[FWbemObject.enabled]));// Boolean
+            mmInfoGeneral.Lines.add(Format('enableUIMd5Hash                %s',[FWbemObject.enableUIMd5Hash]));// Uint8
+            mmInfoGeneral.Lines.add(Format('enableUIParameters             %s',[FWbemObject.enableUIParameters]));// String
+            mmInfoGeneral.Lines.add(Format('instanceGuid                   %s',[FWbemObject.instanceGuid]));// String
+            mmInfoGeneral.Lines.add(Format('pathToEnableUI                 %s',[FWbemObject.pathToEnableUI]));// String
+            mmInfoGeneral.Lines.add(Format('versionNumber                  %s',[FWbemObject.versionNumber]));// String
+         end;
+     end;
+    end;
+    mmInfoGeneral.Lines.add('');
+    FWbemObject:=Unassigned;
+  end;
+end;
+
+function TForm1.Is_Win_Server: Boolean;
+const
+   VER_NT_SERVER      = $0000003;
+   VER_EQUAL          = 1;
+   VER_GREATER_EQUAL  = 3;
+var
+   osvi             : OSVERSIONINFOEX;
+   dwlConditionMask : DWORDLONG;
+   op               : Integer;
+begin
+   dwlConditionMask := 0;
+   op:=VER_GREATER_EQUAL;
+
+   ZeroMemory(@osvi, sizeof(OSVERSIONINFOEX));
+   osvi.dwOSVersionInfoSize := sizeof(OSVERSIONINFOEX);
+   osvi.dwMajorVersion := 5;
+   osvi.dwMinorVersion := 0;
+   osvi.wServicePackMajor := 0;
+   osvi.wServicePackMinor := 0;
+   osvi.wProductType := VER_NT_SERVER;
+
+   dwlConditionMask:=VerSetConditionMask( dwlConditionMask, VER_MAJORVERSION, op );
+   dwlConditionMask:=VerSetConditionMask( dwlConditionMask, VER_MINORVERSION, op );
+   dwlConditionMask:=VerSetConditionMask( dwlConditionMask, VER_SERVICEPACKMAJOR, op );
+   dwlConditionMask:=VerSetConditionMask( dwlConditionMask, VER_SERVICEPACKMINOR, op );
+   dwlConditionMask:=VerSetConditionMask( dwlConditionMask, VER_PRODUCT_TYPE, VER_EQUAL );
+
+   Result:=VerifyVersionInfo(osvi,VER_MAJORVERSION OR VER_MINORVERSION OR
+      VER_SERVICEPACKMAJOR OR VER_SERVICEPACKMINOR OR VER_PRODUCT_TYPE, dwlConditionMask);
+end;
+
+
+end.
