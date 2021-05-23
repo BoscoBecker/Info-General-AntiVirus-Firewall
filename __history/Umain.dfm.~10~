@@ -17,7 +17,7 @@ object Form1: TForm1
     340)
   PixelsPerInch = 96
   TextHeight = 13
-  object lblInfoTop: TLabel
+  object Label1: TLabel
     Left = 32
     Top = 13
     Width = 272
@@ -30,7 +30,7 @@ object Form1: TForm1
     Font.Style = []
     ParentFont = False
   end
-  object btnGetInfo: TButton
+  object Button1: TButton
     Left = 756
     Top = 16
     Width = 75
@@ -38,7 +38,7 @@ object Form1: TForm1
     Anchors = [akTop, akRight]
     Caption = 'Get Info'
     TabOrder = 0
-    OnClick = btnGetInfoClick
+    OnClick = Button1Click
     ExplicitLeft = 672
   end
   object mmInfoGeneral: TMemo
